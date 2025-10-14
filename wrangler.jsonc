@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gainchef-next",
+  "main": "src/server.ts",
+  "compatibility_date": "2025-08-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
+  "assets": {
+    "directory": "dist"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GainChefAgent",
+        "class_name": "GainChefAgent"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GainChefAgent"]
+    }
+  ],
+  "workflows": [
+    {
+      "name": "meal-prep-workflow",
+      "binding": "MEAL_PREP",
+      "class_name": "MealPrepWorkflow"
+    }
+  ]
+}
