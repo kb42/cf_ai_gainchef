@@ -25,23 +25,25 @@ npm install
 
 ### Recommended dev workflow
 
-1. **Run type/lint checks**
+1. **Add OpenAI API Key (or an AI of your choice) to .dev.vars**
+
+2. **Run type/lint checks**
    ```bash
    npm run check
    ```
-2. **Run unit tests (Workers runtime)**
+3. **Run unit tests (Workers runtime)**
    ```bash
    npm run test
    ```
-3. **Start the frontend**
+4. **Start the frontend**
    ```bash
    npm run start
    ```
-4. **In a second terminal, run the Worker against Cloudflare’s edge GPUs**
+5. **In a second terminal, run the Worker against Cloudflare’s edge GPUs**
    ```bash
    npm exec wrangler -- dev --remote
    ```
-5. Visit `http://localhost:5173` to chat with GainChef. The UI talks to the Worker on port `8787`, which streams responses and persists state.
+6. Visit `http://localhost:5173` to chat with GainChef. The UI talks to the Worker on port `8787`, which streams responses and persists state.
 
 ### Everyday commands
 

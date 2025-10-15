@@ -110,8 +110,20 @@ export default function Chat() {
     setTheme(newTheme);
   };
 
+  // generate unique session ID for user isolation
+  const sessionId = useMemo(() => {
+    const storageKey = 'gainchef-session-id';
+    const existing = localStorage.getItem(storageKey);
+    if (existing) return existing;
+
+    const newId = crypto.randomUUID();
+    localStorage.setItem(storageKey, newId);
+    return newId;
+  }, []);
+
   const agent = useAgent({
-    agent: "GainChefAgent"
+    agent: "GainChefAgent",  // agent class name
+    name: sessionId          // unique instance per session
   });
 
   const [agentInput, setAgentInput] = useState("");
@@ -244,9 +256,9 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-[100vh] w-full p-4 flex justify-center items-center bg-gradient-to-br from-slate-50 to-emerald-50 dark:from-zinc-900 dark:to-gray-900 overflow-hidden">
-      <div className="h-[calc(100vh-2rem)] w-full mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl flex flex-col shadow-2xl rounded-xl overflow-hidden relative border-2 border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
-        <div className="px-4 py-3 border-b-2 border-slate-200 dark:border-zinc-700 flex items-center gap-3 sticky top-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm">
+    <div className="h-[100dvh] w-full md:p-4 flex justify-center items-center bg-gradient-to-br from-slate-50 to-emerald-50 dark:from-zinc-900 dark:to-gray-900 overflow-hidden">
+      <div className="h-full md:h-[calc(100vh-2rem)] w-full mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl flex flex-col md:shadow-2xl md:rounded-xl overflow-hidden relative md:border-2 border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+        <div className="px-3 py-2 md:px-4 md:py-3 border-b-2 border-slate-200 dark:border-zinc-700 flex items-center gap-2 md:gap-3 sticky top-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm">
           <div className="flex items-center justify-center h-8 w-8">
             <ChefHat size={28} weight="duotone" className="text-emerald-500" />
           </div>
@@ -273,37 +285,37 @@ export default function Chat() {
           </button>
         </div>
 
-        <div className="px-4 py-3 border-b-2 border-slate-200 dark:border-zinc-700 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-3">
-          <div className="flex flex-wrap justify-between items-center gap-2">
+        <div className="px-3 py-2 md:px-4 md:py-3 border-b-2 border-slate-200 dark:border-zinc-700 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2 md:space-y-3">
+          <div className="flex flex-wrap justify-between items-center gap-1 md:gap-2">
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-600 dark:text-slate-400 font-semibold">
+              <p className="text-[10px] md:text-xs uppercase tracking-wide text-slate-600 dark:text-slate-400 font-semibold">
                 Today's Macros
               </p>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              <p className="text-xs md:text-sm font-medium text-slate-700 dark:text-slate-300 hidden md:block">
                 Stay on target to hit your goals
               </p>
             </div>
-            <span className="text-xs text-muted-foreground">
-              Status: {connectionStatus}
+            <span className="text-[10px] md:text-xs text-muted-foreground">
+              {connectionStatus}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-1.5 md:gap-2">
             {macroCards.map((card) => (
               <Card
                 key={card.label}
-                className="p-3 flex flex-col gap-1 bg-white dark:bg-zinc-800 border-2 border-slate-200 dark:border-zinc-700 shadow-sm"
+                className="p-2 md:p-3 flex flex-col gap-0.5 md:gap-1 bg-white dark:bg-zinc-800 border-2 border-slate-200 dark:border-zinc-700 shadow-sm"
               >
-                <span className="text-xs text-slate-600 dark:text-slate-400 uppercase tracking-wide font-medium">
+                <span className="text-[9px] md:text-xs text-slate-600 dark:text-slate-400 uppercase tracking-wide font-medium">
                   {card.label}
                 </span>
-                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="text-sm md:text-lg font-bold text-emerald-600 dark:text-emerald-400">
                   {card.value}
                 </span>
               </Card>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 md:gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -338,7 +350,7 @@ export default function Chat() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 max-h-[calc(100vh-10rem)] bg-slate-50/50 dark:bg-zinc-900/50">
+        <div className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4 pb-20 md:pb-24 bg-slate-50/50 dark:bg-zinc-900/50">
           {agentMessages.length === 0 && (
             <div className="h-full flex items-center justify-center">
               <Card className="p-6 max-w-md mx-auto bg-white dark:bg-zinc-800 border-2 border-slate-200 dark:border-zinc-700 shadow-lg">
@@ -518,18 +530,18 @@ export default function Chat() {
             });
             setTextareaHeight("auto");
           }}
-          className="p-3 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm absolute bottom-0 left-0 right-0 z-10 border-t-2 border-slate-200 dark:border-zinc-700"
+          className="p-2 md:p-3 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm fixed md:absolute bottom-0 left-0 right-0 z-10 border-t-2 border-slate-200 dark:border-zinc-700 safe-bottom"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2">
             <div className="flex-1 relative">
               <Textarea
                 disabled={pendingToolCallConfirmation}
                 placeholder={
                   pendingToolCallConfirmation
-                    ? "Please respond to the tool confirmation above..."
+                    ? "Respond above..."
                     : "Send a message..."
                 }
-                className="flex w-full border-2 border-slate-200 dark:border-zinc-700 px-3 py-2 ring-offset-background placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base pb-10 bg-white dark:bg-zinc-800"
+                className="flex w-full border-2 border-slate-200 dark:border-zinc-700 px-3 py-2 ring-offset-background placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 text-base md:text-sm min-h-[40px] md:min-h-[24px] max-h-[120px] md:max-h-[calc(75dvh)] overflow-y-auto resize-none rounded-2xl pb-10 bg-white dark:bg-zinc-800"
                 value={agentInput}
                 onChange={(e) => {
                   handleAgentInputChange(e);
