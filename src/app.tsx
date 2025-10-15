@@ -17,7 +17,9 @@ import {
   Trash,
   PaperPlaneRight,
   StopCircle,
-  ChefHat
+  ChefHat,
+  Microphone,
+  Stop
 } from "@phosphor-icons/react";
 
 // tools that should double-check with user
@@ -82,6 +84,12 @@ export default function Chat() {
     return (savedTheme as "dark" | "light") || "dark";
   });
   const [textareaHeight, setTextareaHeight] = useState("auto");
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -112,7 +120,7 @@ export default function Chat() {
 
   // generate unique session ID for user isolation
   const sessionId = useMemo(() => {
-    const storageKey = 'gainchef-session-id';
+    const storageKey = "gainchef-session-id";
     const existing = localStorage.getItem(storageKey);
     if (existing) return existing;
 
@@ -122,8 +130,8 @@ export default function Chat() {
   }, []);
 
   const agent = useAgent({
-    agent: "GainChefAgent",  // agent class name
-    name: sessionId          // unique instance per session
+    agent: "GainChefAgent", // agent class name
+    name: sessionId // unique instance per session
   });
 
   const [agentInput, setAgentInput] = useState("");
@@ -142,6 +150,7 @@ export default function Chat() {
 
     const message = agentInput;
     setAgentInput("");
+    setTextareaHeight("auto");
 
     await sendMessage(
       {
@@ -153,6 +162,153 @@ export default function Chat() {
       }
     );
   };
+
+  // Transcribe audio using Cloudflare AI (Whisper)
+  const transcribeAudio = useCallback(async (audioBlob: Blob) => {
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioBlob);
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error("Transcription failed");
+      }
+
+      const data = (await response.json()) as { text?: string };
+      if (data.text) {
+        setAgentInput((prev) => `${prev}${data.text} `);
+      }
+    } catch (error) {
+      console.error("Transcription error:", error);
+      setRecordingError("Failed to transcribe audio");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, []);
+
+  // Voice recording functionality with fallback for Firefox
+  const startRecording = useCallback(() => {
+    setRecordingError(null);
+
+    // Try Web Speech API first (Chrome, Safari, Edge)
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      // Use native speech recognition
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event) => {
+        let interimTranscript = "";
+        let finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += `${transcript} `;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        // Update textarea with both final and interim results
+        if (finalTranscript) {
+          setAgentInput((prev) => prev + finalTranscript);
+        } else if (interimTranscript) {
+          // Show interim results in real-time
+          const currentFinal = agentInput;
+          setAgentInput(currentFinal + interimTranscript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setRecordingError(`Error: ${event.error}`);
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } else {
+      // Fallback to MediaRecorder for Firefox
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          audioChunksRef.current = [];
+          const mediaRecorder = new MediaRecorder(stream);
+
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunksRef.current.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunksRef.current, {
+              type: "audio/webm"
+            });
+            for (const track of stream.getTracks()) {
+              track.stop();
+            }
+            await transcribeAudio(audioBlob);
+          };
+
+          mediaRecorder.start();
+          mediaRecorderRef.current = mediaRecorder;
+          setIsRecording(true);
+        })
+        .catch((error) => {
+          console.error("Microphone access error:", error);
+          setRecordingError("Microphone access denied");
+        });
+    }
+  }, [agentInput, transcribeAudio]);
+
+  const stopRecording = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    setIsRecording(false);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
 
   const {
     messages: agentMessages,
@@ -181,9 +337,31 @@ export default function Chat() {
     }
   };
 
+  // Improved auto-scroll: scroll on new messages and when streaming
   useEffect(() => {
-    agentMessages.length > 0 && scrollToBottom();
-  }, [agentMessages, scrollToBottom]);
+    if (agentMessages.length > 0) {
+      // Use requestAnimationFrame for smoother scrolling during streaming
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "end"
+        });
+      });
+    }
+  }, [agentMessages]);
+
+  // Additional scroll on status change to ensure we're at bottom during streaming
+  useEffect(() => {
+    if (status === "streaming") {
+      const interval = setInterval(() => {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "end"
+        });
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [status]);
 
   const pendingToolCallConfirmation = agentMessages.some((m: UIMessage) =>
     m.parts?.some(
@@ -532,16 +710,56 @@ export default function Chat() {
           }}
           className="p-2 md:p-3 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm fixed md:absolute bottom-0 left-0 right-0 z-10 border-t-2 border-slate-200 dark:border-zinc-700 safe-bottom"
         >
-          <div className="flex items-center gap-1.5 md:gap-2">
+          {recordingError && (
+            <div className="mb-2 px-3 py-2 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-xs rounded-lg">
+              {recordingError}
+            </div>
+          )}
+          <div className="flex items-end gap-1.5 md:gap-2">
+            {/* Microphone button */}
+            <button
+              type="button"
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={pendingToolCallConfirmation || isTranscribing}
+              className={`inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 rounded-full p-2.5 md:p-2 h-fit border-2 min-w-[44px] md:min-w-[36px] ${
+                isRecording
+                  ? "bg-red-500 text-white hover:bg-red-600 border-red-400 dark:border-red-600 animate-pulse"
+                  : isTranscribing
+                    ? "bg-blue-500 text-white border-blue-400 dark:border-blue-600 animate-pulse"
+                    : "bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-emerald-500 dark:border-emerald-600"
+              }`}
+              aria-label={
+                isRecording
+                  ? "Stop recording"
+                  : isTranscribing
+                    ? "Transcribing..."
+                    : "Start voice input"
+              }
+            >
+              {isRecording ? (
+                <Stop size={20} weight="fill" />
+              ) : (
+                <Microphone size={20} weight="fill" />
+              )}
+            </button>
+
             <div className="flex-1 relative">
               <Textarea
-                disabled={pendingToolCallConfirmation}
+                disabled={pendingToolCallConfirmation || isTranscribing}
                 placeholder={
-                  pendingToolCallConfirmation
-                    ? "Respond above..."
-                    : "Send a message..."
+                  isTranscribing
+                    ? "Transcribing..."
+                    : isRecording
+                      ? "Listening..."
+                      : pendingToolCallConfirmation
+                        ? "Respond above..."
+                        : "Send a message..."
                 }
-                className="flex w-full border-2 border-slate-200 dark:border-zinc-700 px-3 py-2 ring-offset-background placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 text-base md:text-sm min-h-[40px] md:min-h-[24px] max-h-[120px] md:max-h-[calc(75dvh)] overflow-y-auto resize-none rounded-2xl pb-10 bg-white dark:bg-zinc-800"
+                className={`flex w-full border-2 px-3 py-2 ring-offset-background placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 text-base md:text-sm min-h-[44px] md:min-h-[40px] max-h-[120px] md:max-h-[calc(75dvh)] overflow-y-auto resize-none rounded-2xl pr-12 bg-white dark:bg-zinc-800 ${
+                  isRecording
+                    ? "border-red-400 dark:border-red-600 ring-2 ring-red-300 dark:ring-red-800"
+                    : "border-slate-200 dark:border-zinc-700"
+                }`}
                 value={agentInput}
                 onChange={(e) => {
                   handleAgentInputChange(e);
@@ -560,27 +778,27 @@ export default function Chat() {
                     setTextareaHeight("auto");
                   }
                 }}
-                rows={2}
+                rows={1}
                 style={{ height: textareaHeight }}
               />
-              <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
+              <div className="absolute bottom-1 right-1 flex flex-row gap-1">
                 {status === "submitted" || status === "streaming" ? (
                   <button
                     type="button"
                     onClick={stop}
-                    className="inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-emerald-500 text-white hover:bg-emerald-600 rounded-full p-1.5 h-fit border border-neutral-200 dark:border-neutral-800"
+                    className="inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-red-500 text-white hover:bg-red-600 rounded-full p-2 h-fit border border-red-400 dark:border-red-600 min-w-[40px] min-h-[40px]"
                     aria-label="Stop generation"
                   >
-                    <StopCircle size={16} />
+                    <StopCircle size={18} weight="fill" />
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    className="inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-emerald-500 text-white hover:bg-emerald-600 rounded-full p-1.5 h-fit border border-neutral-200 dark:border-neutral-800"
+                    className="inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-slate-300 dark:disabled:bg-zinc-700 rounded-full p-2 h-fit border border-emerald-400 dark:border-emerald-600 min-w-[40px] min-h-[40px]"
                     disabled={pendingToolCallConfirmation || !agentInput.trim()}
                     aria-label="Send message"
                   >
-                    <PaperPlaneRight size={16} />
+                    <PaperPlaneRight size={18} weight="fill" />
                   </button>
                 )}
               </div>

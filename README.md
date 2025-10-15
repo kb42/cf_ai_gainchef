@@ -2,12 +2,14 @@
 
 GainChef is a Workers AI powered meal coach that tracks macros, stores meal history, and delivers AI-planned menus using Cloudflare Agents, Durable Objects, Workflows, and a Vite/React frontend.
 
-## What’s inside
+## What's inside
 
-- Workers AI (default: `@cf/meta/llama-3.3-70b-instruct-fp8-fast`) with automatic fallback to a lighter model when tools aren’t supported
-- Durable Object state for user profiles, meal logs, meal plans, and shopping lists
-- Cloudflare Workflows for scheduled reminders and summaries
-- React UI with macros dashboard, one-click prompts, and tool invocation cards
+- **LLM**: OpenAI GPT-4o-mini for chat + Cloudflare AI Whisper for voice transcription
+- **Session isolation**: Each user gets a unique Durable Object instance with persistent storage
+- **Durable Object state** for user profiles, meal logs, meal plans, and shopping lists
+- **Cloudflare Workflows** for scheduled reminders and summaries
+- **Voice input**: Real-time speech recognition (Chrome/Safari/Edge) + MediaRecorder with Whisper fallback (Firefox)
+- **Responsive React UI** with mobile-optimized macros dashboard, chat interface, and tool invocation cards
 
 ## Prerequisites
 
@@ -66,17 +68,18 @@ Set `AI`, `GainChefAgent`, and `MEAL_PREP` bindings in `wrangler.jsonc` to match
 ## Repository layout
 
 ```
-├── public/              static assets served by Workers
+├── public/                     static assets served by Workers
 ├── src/
-│   ├── app.tsx          main React entry (chat experience)
-│   ├── server.ts        durable object agent + Worker routes
-│   ├── tools.ts         tool definitions invoked by the LLM
-│   ├── workflow.ts      Cloudflare Workflows entrypoint
-│   ├── utils.ts         helper for cleaning tool-call noise
-│   └── types.ts         shared domain models
-├── tests/               Vitest suites (Workers test harness)
-├── wrangler.jsonc       bindings for AI, Durable Object, workflows, assets
-└── README.md            this file
+│   ├── app.tsx                 main React entry (chat + voice input)
+│   ├── server.ts               Durable Object agent + Worker routes + transcription API
+│   ├── tools.ts                tool definitions invoked by the LLM
+│   ├── workflow.ts             Cloudflare Workflows entrypoint
+│   ├── utils.ts                helper for cleaning tool-call noise
+│   ├── types.ts                shared domain models
+│   └── speech-recognition.d.ts TypeScript declarations for Web Speech API
+├── tests/                      Vitest suites (Workers test harness)
+├── wrangler.jsonc              bindings for AI, Durable Object, workflows, assets
+└── README.md                   this file
 ```
 
 ## Extending GainChef

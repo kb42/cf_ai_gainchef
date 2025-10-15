@@ -865,6 +865,42 @@ export default {
       });
     }
 
+    if (url.pathname === "/api/transcribe" && request.method === "POST") {
+      try {
+        const formData = await request.formData();
+        const audioFile = formData.get("audio");
+
+        if (!audioFile || !(audioFile instanceof Blob)) {
+          return toJsonResponse(
+            { error: "No audio file provided" },
+            { status: 400 }
+          );
+        }
+
+        // Convert audio blob to array buffer
+        const audioBuffer = await audioFile.arrayBuffer();
+        const audioArray = new Uint8Array(audioBuffer);
+
+        // Use Cloudflare AI Whisper model for transcription
+        const response = await env.AI.run("@cf/openai/whisper", {
+          audio: Array.from(audioArray)
+        });
+
+        const result = response as { text?: string };
+
+        return toJsonResponse({
+          text: result.text || "",
+          success: true
+        });
+      } catch (error) {
+        console.error("Transcription error:", error);
+        return toJsonResponse(
+          { error: "Failed to transcribe audio" },
+          { status: 500 }
+        );
+      }
+    }
+
     if (url.pathname === "/trigger-workflow" && request.method === "POST") {
       try {
         const body = (await request.json()) as WorkflowPayload | undefined;
